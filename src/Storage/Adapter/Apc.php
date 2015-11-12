@@ -123,6 +123,20 @@ class Apc extends AbstractAdapter implements
     /* IterableInterface */
 
     /**
+     * Create an ApcIterator, according to APCU version
+     *
+     * @return ApcIterator
+     */
+    private static function createIterator($pattern = NULL, $format = APC_ITER_ALL, $chunk_size = 100, $list = APC_LIST_ACTIVE)
+    {
+        if (version_compare(phpversion('apcu'), '5', '>')) {
+            return new BaseApcIterator($pattern, $format, $chunk_size, $list);
+        } else {
+            return new BaseApcIterator('user', $pattern, $format, $chunk_size, $list);
+        }
+    }
+
+    /**
      * Get the storage iterator
      *
      * @return ApcIterator
@@ -138,7 +152,7 @@ class Apc extends AbstractAdapter implements
             $pattern = '/^' . preg_quote($prefix, '/') . '/';
         }
 
-        $baseIt = new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE);
+        $baseIt = self::createIterator($pattern, 0, 1, APC_LIST_ACTIVE);
         return new ApcIterator($this, $baseIt, $prefix);
     }
 
@@ -172,7 +186,7 @@ class Apc extends AbstractAdapter implements
         $options = $this->getOptions();
         $prefix  = $namespace . $options->getNamespaceSeparator();
         $pattern = '/^' . preg_quote($prefix, '/') . '/';
-        return apcu_delete(new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE));
+        return apcu_delete(self::createIterator($pattern, 0, 1, APC_LIST_ACTIVE));
     }
 
     /* ClearByPrefixInterface */
@@ -194,7 +208,7 @@ class Apc extends AbstractAdapter implements
         $namespace = $options->getNamespace();
         $nsPrefix  = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
         $pattern = '/^' . preg_quote($nsPrefix . $prefix, '/') . '/';
-        return apcu_delete(new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE));
+        return apcu_delete(self::createIterator($pattern, 0, 1, APC_LIST_ACTIVE));
     }
 
     /* reading */
@@ -326,7 +340,7 @@ class Apc extends AbstractAdapter implements
         } else {
             $format   = APC_ITER_ALL ^ APC_ITER_VALUE ^ APC_ITER_TYPE ^ APC_ITER_REFCOUNT;
             $regexp   = '/^' . preg_quote($internalKey, '/') . '$/';
-            $it       = new BaseApcIterator('user', $regexp, $format, 100, APC_LIST_ACTIVE);
+            $it       = self::createIterator($regexp, $format, 100, APC_LIST_ACTIVE);
             $metadata = $it->current();
         }
 
@@ -368,7 +382,7 @@ class Apc extends AbstractAdapter implements
         }
 
         $format  = APC_ITER_ALL ^ APC_ITER_VALUE ^ APC_ITER_TYPE ^ APC_ITER_REFCOUNT;
-        $it      = new BaseApcIterator('user', $pattern, $format, 100, APC_LIST_ACTIVE);
+        $it      = self::createIterator($pattern, $format, 100, APC_LIST_ACTIVE);
         $result  = [];
         foreach ($it as $internalKey => $metadata) {
             // @see http://pecl.php.net/bugs/bug.php?id=22564
