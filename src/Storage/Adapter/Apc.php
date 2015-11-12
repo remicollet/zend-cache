@@ -44,14 +44,14 @@ class Apc extends AbstractAdapter implements
      */
     public function __construct($options = null)
     {
-        $enabled = ini_get('apc.enabled');
+        $enabled = ini_get('apc.enabled') && function_exists('apcu_store');
         if (PHP_SAPI == 'cli') {
             $enabled = $enabled && (bool) ini_get('apc.enable_cli');
         }
 
         if (!$enabled) {
             throw new Exception\ExtensionNotLoadedException(
-                "ext/apc is disabled - see 'apc.enabled' and 'apc.enable_cli'"
+                "ext/apcu is disabled - see 'apc.enabled' and 'apc.enable_cli'"
             );
         }
 
@@ -100,7 +100,7 @@ class Apc extends AbstractAdapter implements
     public function getTotalSpace()
     {
         if ($this->totalSpace === null) {
-            $smaInfo = apc_sma_info(true);
+            $smaInfo = apcu_sma_info(true);
             $this->totalSpace = $smaInfo['num_seg'] * $smaInfo['seg_size'];
         }
 
@@ -116,7 +116,7 @@ class Apc extends AbstractAdapter implements
      */
     public function getAvailableSpace()
     {
-        $smaInfo = apc_sma_info(true);
+        $smaInfo = apcu_sma_info(true);
         return $smaInfo['avail_mem'];
     }
 
@@ -151,7 +151,7 @@ class Apc extends AbstractAdapter implements
      */
     public function flush()
     {
-        return apc_clear_cache('user');
+        return apcu_clear_cache();
     }
 
     /* ClearByNamespaceInterface */
@@ -172,7 +172,7 @@ class Apc extends AbstractAdapter implements
         $options = $this->getOptions();
         $prefix  = $namespace . $options->getNamespaceSeparator();
         $pattern = '/^' . preg_quote($prefix, '/') . '/';
-        return apc_delete(new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE));
+        return apcu_delete(new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE));
     }
 
     /* ClearByPrefixInterface */
@@ -194,7 +194,7 @@ class Apc extends AbstractAdapter implements
         $namespace = $options->getNamespace();
         $nsPrefix  = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
         $pattern = '/^' . preg_quote($nsPrefix . $prefix, '/') . '/';
-        return apc_delete(new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE));
+        return apcu_delete(new BaseApcIterator('user', $pattern, 0, 1, APC_LIST_ACTIVE));
     }
 
     /* reading */
@@ -214,7 +214,7 @@ class Apc extends AbstractAdapter implements
         $namespace   = $options->getNamespace();
         $prefix      = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
         $internalKey = $prefix . $normalizedKey;
-        $result      = apc_fetch($internalKey, $success);
+        $result      = apcu_fetch($internalKey, $success);
 
         if (!$success) {
             return;
@@ -236,7 +236,7 @@ class Apc extends AbstractAdapter implements
         $options   = $this->getOptions();
         $namespace = $options->getNamespace();
         if ($namespace === '') {
-            return apc_fetch($normalizedKeys);
+            return apcu_fetch($normalizedKeys);
         }
 
         $prefix       = $namespace . $options->getNamespaceSeparator();
@@ -245,7 +245,7 @@ class Apc extends AbstractAdapter implements
             $internalKeys[] = $prefix . $normalizedKey;
         }
 
-        $fetch = apc_fetch($internalKeys);
+        $fetch = apcu_fetch($internalKeys);
 
         // remove namespace prefix
         $prefixL = strlen($prefix);
@@ -269,7 +269,7 @@ class Apc extends AbstractAdapter implements
         $options   = $this->getOptions();
         $namespace = $options->getNamespace();
         $prefix    = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
-        return apc_exists($prefix . $normalizedKey);
+        return apcu_exists($prefix . $normalizedKey);
     }
 
     /**
@@ -285,7 +285,7 @@ class Apc extends AbstractAdapter implements
         $namespace = $options->getNamespace();
         if ($namespace === '') {
             // array_filter with no callback will remove entries equal to FALSE
-            return array_keys(array_filter(apc_exists($normalizedKeys)));
+            return array_keys(array_filter(apcu_exists($normalizedKeys)));
         }
 
         $prefix       = $namespace . $options->getNamespaceSeparator();
@@ -294,7 +294,7 @@ class Apc extends AbstractAdapter implements
             $internalKeys[] = $prefix . $normalizedKey;
         }
 
-        $exists  = apc_exists($internalKeys);
+        $exists  = apcu_exists($internalKeys);
         $result  = [];
         $prefixL = strlen($prefix);
         foreach ($exists as $internalKey => $bool) {
@@ -321,7 +321,7 @@ class Apc extends AbstractAdapter implements
         $internalKey = $prefix . $normalizedKey;
 
         // @see http://pecl.php.net/bugs/bug.php?id=22564
-        if (!apc_exists($internalKey)) {
+        if (!apcu_exists($internalKey)) {
             $metadata = false;
         } else {
             $format   = APC_ITER_ALL ^ APC_ITER_VALUE ^ APC_ITER_TYPE ^ APC_ITER_REFCOUNT;
@@ -372,7 +372,7 @@ class Apc extends AbstractAdapter implements
         $result  = [];
         foreach ($it as $internalKey => $metadata) {
             // @see http://pecl.php.net/bugs/bug.php?id=22564
-            if (!apc_exists($internalKey)) {
+            if (!apcu_exists($internalKey)) {
                 continue;
             }
 
@@ -401,10 +401,10 @@ class Apc extends AbstractAdapter implements
         $internalKey = $prefix . $normalizedKey;
         $ttl         = $options->getTtl();
 
-        if (!apc_store($internalKey, $value, $ttl)) {
+        if (!apcu_store($internalKey, $value, $ttl)) {
             $type = is_object($value) ? get_class($value) : gettype($value);
             throw new Exception\RuntimeException(
-                "apc_store('{$internalKey}', <{$type}>, {$ttl}) failed"
+                "apcu_store('{$internalKey}', <{$type}>, {$ttl}) failed"
             );
         }
 
@@ -423,7 +423,7 @@ class Apc extends AbstractAdapter implements
         $options   = $this->getOptions();
         $namespace = $options->getNamespace();
         if ($namespace === '') {
-            return array_keys(apc_store($normalizedKeyValuePairs, null, $options->getTtl()));
+            return array_keys(apcu_store($normalizedKeyValuePairs, null, $options->getTtl()));
         }
 
         $prefix                = $namespace . $options->getNamespaceSeparator();
@@ -433,7 +433,7 @@ class Apc extends AbstractAdapter implements
             $internalKeyValuePairs[$internalKey] = &$value;
         }
 
-        $failedKeys = apc_store($internalKeyValuePairs, null, $options->getTtl());
+        $failedKeys = apcu_store($internalKeyValuePairs, null, $options->getTtl());
         $failedKeys = array_keys($failedKeys);
 
         // remove prefix
@@ -461,14 +461,14 @@ class Apc extends AbstractAdapter implements
         $internalKey = $prefix . $normalizedKey;
         $ttl         = $options->getTtl();
 
-        if (!apc_add($internalKey, $value, $ttl)) {
-            if (apc_exists($internalKey)) {
+        if (!apcu_add($internalKey, $value, $ttl)) {
+            if (apcu_exists($internalKey)) {
                 return false;
             }
 
             $type = is_object($value) ? get_class($value) : gettype($value);
             throw new Exception\RuntimeException(
-                "apc_add('{$internalKey}', <{$type}>, {$ttl}) failed"
+                "apcu_add('{$internalKey}', <{$type}>, {$ttl}) failed"
             );
         }
 
@@ -487,7 +487,7 @@ class Apc extends AbstractAdapter implements
         $options   = $this->getOptions();
         $namespace = $options->getNamespace();
         if ($namespace === '') {
-            return array_keys(apc_add($normalizedKeyValuePairs, null, $options->getTtl()));
+            return array_keys(apcu_add($normalizedKeyValuePairs, null, $options->getTtl()));
         }
 
         $prefix                = $namespace . $options->getNamespaceSeparator();
@@ -497,7 +497,7 @@ class Apc extends AbstractAdapter implements
             $internalKeyValuePairs[$internalKey] = $value;
         }
 
-        $failedKeys = apc_add($internalKeyValuePairs, null, $options->getTtl());
+        $failedKeys = apcu_add($internalKeyValuePairs, null, $options->getTtl());
         $failedKeys = array_keys($failedKeys);
 
         // remove prefix
@@ -524,15 +524,15 @@ class Apc extends AbstractAdapter implements
         $prefix      = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
         $internalKey = $prefix . $normalizedKey;
 
-        if (!apc_exists($internalKey)) {
+        if (!apcu_exists($internalKey)) {
             return false;
         }
 
         $ttl = $options->getTtl();
-        if (!apc_store($internalKey, $value, $ttl)) {
+        if (!apcu_store($internalKey, $value, $ttl)) {
             $type = is_object($value) ? get_class($value) : gettype($value);
             throw new Exception\RuntimeException(
-                "apc_store('{$internalKey}', <{$type}>, {$ttl}) failed"
+                "apcu_store('{$internalKey}', <{$type}>, {$ttl}) failed"
             );
         }
 
@@ -551,7 +551,7 @@ class Apc extends AbstractAdapter implements
         $options   = $this->getOptions();
         $namespace = $options->getNamespace();
         $prefix    = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
-        return apc_delete($prefix . $normalizedKey);
+        return apcu_delete($prefix . $normalizedKey);
     }
 
     /**
@@ -566,7 +566,7 @@ class Apc extends AbstractAdapter implements
         $options   = $this->getOptions();
         $namespace = $options->getNamespace();
         if ($namespace === '') {
-            return apc_delete($normalizedKeys);
+            return apcu_delete($normalizedKeys);
         }
 
         $prefix       = $namespace . $options->getNamespaceSeparator();
@@ -575,7 +575,7 @@ class Apc extends AbstractAdapter implements
             $internalKeys[] = $prefix . $normalizedKey;
         }
 
-        $failedKeys = apc_delete($internalKeys);
+        $failedKeys = apcu_delete($internalKeys);
 
         // remove prefix
         $prefixL = strlen($prefix);
@@ -601,15 +601,15 @@ class Apc extends AbstractAdapter implements
         $prefix      = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
         $internalKey = $prefix . $normalizedKey;
         $value       = (int) $value;
-        $newValue    = apc_inc($internalKey, $value);
+        $newValue    = apcu_inc($internalKey, $value);
 
         // initial value
         if ($newValue === false) {
             $ttl      = $options->getTtl();
             $newValue = $value;
-            if (!apc_add($internalKey, $newValue, $ttl)) {
+            if (!apcu_add($internalKey, $newValue, $ttl)) {
                 throw new Exception\RuntimeException(
-                    "apc_add('{$internalKey}', {$newValue}, {$ttl}) failed"
+                    "apcu_add('{$internalKey}', {$newValue}, {$ttl}) failed"
                 );
             }
         }
@@ -632,15 +632,15 @@ class Apc extends AbstractAdapter implements
         $prefix      = ($namespace === '') ? '' : $namespace . $options->getNamespaceSeparator();
         $internalKey = $prefix . $normalizedKey;
         $value       = (int) $value;
-        $newValue    = apc_dec($internalKey, $value);
+        $newValue    = apcu_dec($internalKey, $value);
 
         // initial value
         if ($newValue === false) {
             $ttl      = $options->getTtl();
             $newValue = -$value;
-            if (!apc_add($internalKey, $newValue, $ttl)) {
+            if (!apcu_add($internalKey, $newValue, $ttl)) {
                 throw new Exception\RuntimeException(
-                    "apc_add('{$internalKey}', {$newValue}, {$ttl}) failed"
+                    "apcu_add('{$internalKey}', {$newValue}, {$ttl}) failed"
                 );
             }
         }
@@ -742,7 +742,7 @@ class Apc extends AbstractAdapter implements
     protected function internalCheckAndSetItem(& $token, & $normalizedKey, & $value)
     {
         if (is_int($token) && is_int($value)) {
-            return apc_cas($normalizedKey, $token, $value);
+            return apcu_cas($normalizedKey, $token, $value);
         }
 
         return parent::internalCheckAndSetItem($token, $normalizedKey, $value);

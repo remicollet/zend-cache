@@ -48,8 +48,8 @@ class ApcTest extends CommonAdapterTest
 
     public function tearDown()
     {
-        if (function_exists('apc_clear_cache')) {
-            apc_clear_cache('user');
+        if (function_exists('apcu_clear_cache')) {
+            apcu_clear_cache();
         }
 
         // reset ini configurations
